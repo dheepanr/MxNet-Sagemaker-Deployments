@@ -7,6 +7,7 @@ import shutil
 import time
 import warnings
 import io
+import argparse
 
 import mxnet as mx
 from mxnet import autograd as ag
@@ -14,11 +15,8 @@ from mxnet import gluon
 from mxnet.gluon.model_zoo import vision as models
 import numpy as np
 
-
-##############################################
 from mxnet.gluon.data.vision.datasets import ImageFolderDataset
 from mxnet.gluon.data.vision import transforms
-##############################################
 
 
 # ------------------------------------------------------------ #
@@ -80,22 +78,9 @@ def train(current_host, hosts, num_gpus, log_interval, channel_input_dirs,
     os.mkdir('/opt/ml/checkpoints')
     CHECKPOINTS_DIR = '/opt/ml/checkpoints'
     checkpoints_enabled = os.path.exists(CHECKPOINTS_DIR)
-    
-    ############################################### 
-    #train = ImageFolderDataset('./hotdog_not_hotdog/train')
-    #test = ImageFolderDataset('./hotdog_not_hotdog/test')
-    
-    print("The data dir is: ")
-    print(data_dir)
-    print(os.listdir(data_dir))
-    print(os.listdir('/opt/ml/input/data/training/train'))
-        
-    
+
     train = ImageFolderDataset('/opt/ml/input/data/training/train')
     test = ImageFolderDataset('/opt/ml/input/data/training/test')
-   
-    
-    print("Loaded Image Folders")
     
     transform_func = transforms.Compose([
                                    transforms.Resize(size=(256)),
@@ -115,7 +100,6 @@ def train(current_host, hosts, num_gpus, log_interval, channel_input_dirs,
     print("Initialized Batching Operation")
 
     net.initialize(mx.init.Xavier(), ctx=ctx)
-    print("Initialized Model")
 
     # Trainer is for updating parameters with gradient.
     criterion = gluon.loss.SoftmaxCrossEntropyLoss()
@@ -147,7 +131,6 @@ def train(current_host, hosts, num_gpus, log_interval, channel_input_dirs,
             training_samples += data.shape[0]
         train_loss = cumulative_train_loss.asscalar()/training_samples
         name, train_acc = metric.get()
-        print("done training section")
         
         # validation loop
         cumulative_valid_loss = mx.nd.zeros(1, ctx)
@@ -202,41 +185,6 @@ def save(net, model_dir):
         shutil.copyfile(os.path.join('/opt/ml/checkpoints/', 'model-symbol.json'), os.path.join('/opt/ml/model/', 'model-symbol.json'))
         print(os.listdir('/opt/ml/model/'))
 
-
-def get_data(path, augment, num_cpus, batch_size, data_shape, resize=-1, num_parts=1, part_index=0):
-    return mx.image.ImageIter(
-        path_root=path,
-        resize=resize,
-        data_shape=data_shape,
-        batch_size=batch_size,
-        rand_crop=augment,
-        rand_mirror=augment,
-        preprocess_threads=num_cpus,
-        num_parts=num_parts,
-        part_index=part_index)
-
-
-def get_test_data(num_cpus, test_dir, batch_size, data_shape, resize=-1):
-    return get_data(test_dir, False, num_cpus, batch_size, data_shape, resize, 1, 0)
-
-
-def get_train_data(num_cpus, train_dir, batch_size, data_shape, resize=-1, num_parts=1, part_index=0):
-    return get_data(train_dir, True, num_cpus, batch_size, data_shape, resize, num_parts,
-                    part_index)
-
-
-def test(ctx, net, test_data):
-    test_data.reset()
-    metric = mx.metric.Accuracy()
-
-    for i, batch in enumerate(test_data):
-        data = gluon.utils.split_and_load(batch.data[0], ctx_list=ctx, batch_axis=0)
-        label = gluon.utils.split_and_load(batch.label[0], ctx_list=ctx, batch_axis=0)
-        outputs = []
-        for x in data:
-            outputs.append(net(x))
-        metric.update(label, outputs)
-    return metric.get()
 
 
 # ------------------------------------------------------------ #
